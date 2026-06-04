@@ -224,6 +224,22 @@ function renderQueueTableShell(state) {
         margin-bottom: 24px;
       }
 
+      button {
+        appearance: none;
+        border: 1px solid #134f94;
+        background: #134f94;
+        color: #ffffff;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #0f3f78;
+      }
+
       h1 {
         margin: 0 0 6px;
         font-size: 2rem;
@@ -326,6 +342,9 @@ function renderQueueTableShell(state) {
           <h1>OopsProof</h1>
           <p>Queue Table</p>
         </div>
+        <form method="get" action="/" aria-label="Refresh live Buffer data">
+          <button type="submit">Refresh</button>
+        </form>
       </header>
 
       <div class="status" role="${isError ? "alert" : "status"}">

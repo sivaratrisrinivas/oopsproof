@@ -64,6 +64,120 @@ test("Queue Table shows loaded and empty states when live Buffer data has no Sch
   assert.doesNotMatch(response.body, /fake post|seeded post|demo fallback/i);
 });
 
+test("Queue Table includes a manual Refresh control for fetching live Buffer data", async () => {
+  const response = await createOopsProofResponse({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [],
+    }),
+  });
+
+  assert.match(response.body, /<form method="get" action="\/"[^>]*aria-label="Refresh live Buffer data"/);
+  assert.match(response.body, /<button type="submit">Refresh<\/button>/);
+});
+
+test("manual Refresh fetches live Buffer data again and re-runs deterministic diagnosis", async () => {
+  let loadCount = 0;
+  const options = {
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => {
+      loadCount += 1;
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts:
+          loadCount === 1
+            ? [
+                {
+                  id: "post-clear",
+                  text: "A simple evergreen update for the queue",
+                  channelId: "channel-x",
+                  channelName: "Founder X",
+                  service: "twitter",
+                  status: "scheduled",
+                  dueAt: "2026-07-10T12:00:00.000Z",
+                  createdAt: "2026-06-01T09:00:00.000Z",
+                },
+              ]
+            : [
+                {
+                  id: "post-risky",
+                  text: "LaunchKit ships today for early partners",
+                  channelId: "channel-x",
+                  channelName: "Founder X",
+                  service: "twitter",
+                  status: "scheduled",
+                  dueAt: "2026-06-10T12:00:00.000Z",
+                  createdAt: "2026-06-01T09:00:00.000Z",
+                },
+              ],
+      };
+    },
+  };
+
+  const initialResponse = await createOopsProofResponse(options);
+  const refreshedResponse = await createOopsProofResponse(options);
+
+  assert.equal(loadCount, 2);
+  assert.match(initialResponse.body, /A simple evergreen update for the queue/);
+  assert.match(initialResponse.body, /Clear/);
+  assert.doesNotMatch(initialResponse.body, /LaunchKit ships today/);
+  assert.match(refreshedResponse.body, /LaunchKit ships today for early partners/);
+  assert.match(refreshedResponse.body, /High/);
+  assert.match(refreshedResponse.body, /Mentions embargo term LaunchKit before 2026-07-01\./);
+});
+
+test("manual Refresh failure shows a Buffer error without keeping the previous queue", async () => {
+  let loadCount = 0;
+  const options = {
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => {
+      loadCount += 1;
+      if (loadCount === 2) {
+        throw new Error("Buffer refresh failed");
+      }
+
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts: [
+          {
+            id: "post-clear",
+            text: "A simple evergreen update for the queue",
+            channelId: "channel-x",
+            channelName: "Founder X",
+            service: "twitter",
+            status: "scheduled",
+            dueAt: "2026-07-10T12:00:00.000Z",
+            createdAt: "2026-06-01T09:00:00.000Z",
+          },
+        ],
+      };
+    },
+  };
+
+  const initialResponse = await createOopsProofResponse(options);
+  const refreshedResponse = await createOopsProofResponse(options);
+
+  assert.match(initialResponse.body, /A simple evergreen update for the queue/);
+  assert.match(refreshedResponse.body, /Buffer data could not load/);
+  assert.match(refreshedResponse.body, /Buffer refresh failed/);
+  assert.doesNotMatch(refreshedResponse.body, /A simple evergreen update for the queue/);
+});
+
+test("Queue Table does not auto-refresh or render Quarantine History", async () => {
+  const response = await createOopsProofResponse({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [],
+    }),
+  });
+
+  assert.doesNotMatch(response.body, /<script|setInterval|setTimeout|fetch\(|EventSource|WebSocket/i);
+  assert.doesNotMatch(response.body, /http-equiv=["']refresh["']/i);
+  assert.doesNotMatch(response.body, /Quarantine History|audit log|action log|database|persisted quarantine/i);
+});
+
 test("initial route shows selected Buffer Organization and normalized Scheduled Posts", async () => {
   const response = await createOopsProofResponse({
     env: { BUFFER_API_KEY: "server-key" },

@@ -20,6 +20,12 @@ The first usable screen is the Queue Table. It shows every Scheduled Post in the
 
 OopsProof runs deterministic diagnosis with the v1 Risk Rules: Embargo Term Rule, Stale Relative Date Rule, and Duplicate Opening Rule. Each row shows the post's highest Risk Level. Risky Scheduled Posts can be opened to inspect every Finding. Clear Posts stay visible for context and have no Quarantine or other action control.
 
+## Refresh
+
+OopsProof refreshes the Queue Table only when the user presses Refresh. Refresh fetches live Buffer data again from the server, re-runs deterministic diagnosis against the newly loaded Scheduled Posts, and renders the current success, empty queue, or Buffer error state.
+
+OopsProof v1 does not auto-refresh, poll Buffer, or store Quarantine History. The current Buffer queue remains the source of truth after each refresh.
+
 ## Quarantine
 
 Risky Scheduled Posts offer Quarantine Confirmation before OopsProof touches Buffer. Confirmed Quarantine creates a same-channel Draft Post with `saveToDraft: true` and the Safe Draft Replacement text `Needs review before publishing: {original first 80 characters}`.
