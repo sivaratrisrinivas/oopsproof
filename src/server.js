@@ -2,7 +2,12 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { BufferClientError, loadLiveBufferQueue } from "./bufferClient.js";
+import {
+  BufferClientError,
+  createDraftPost as createBufferDraftPost,
+  loadLiveBufferQueue,
+} from "./bufferClient.js";
+import { createSafeDraftReplacement } from "./quarantineService.js";
 import { assessQueuePosts } from "./riskEngine.js";
 
 const DEFAULT_PORT = 3000;
@@ -11,20 +16,40 @@ export function createOopsProofServer({
   env = process.env,
   envFilePath = resolve(process.cwd(), ".env"),
   loadBufferData = loadLiveBufferQueue,
+  createDraftPost = createBufferDraftPost,
 } = {}) {
   return createServer(async (request, response) => {
-    if (request.method !== "GET" || request.url !== "/") {
+    if (request.method === "GET" && request.url === "/") {
+      const appResponse = await createOopsProofResponse({ env, envFilePath, loadBufferData });
+      response.writeHead(200, {
+        "content-type": appResponse.contentType,
+        "cache-control": appResponse.cacheControl,
+      });
+      response.end(appResponse.body);
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/quarantine") {
+      const appResponse = await createOopsProofActionResponse({
+        env,
+        envFilePath,
+        loadBufferData,
+        createDraftPost,
+        formData: new URLSearchParams(await readRequestBody(request)),
+      });
+      response.writeHead(200, {
+        "content-type": appResponse.contentType,
+        "cache-control": appResponse.cacheControl,
+      });
+      response.end(appResponse.body);
+      return;
+    }
+
+    {
       response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       response.end("Not found");
       return;
     }
-
-    const appResponse = await createOopsProofResponse({ env, envFilePath, loadBufferData });
-    response.writeHead(200, {
-      "content-type": appResponse.contentType,
-      "cache-control": appResponse.cacheControl,
-    });
-    response.end(appResponse.body);
   });
 }
 
@@ -36,34 +61,81 @@ export async function createOopsProofResponse({
   const localEnv = await readLocalEnv(envFilePath);
   const bufferApiKey = env.BUFFER_API_KEY || localEnv.BUFFER_API_KEY || "";
 
-  let state;
+  return responseFromState(await loadReadyState({ bufferApiKey, loadBufferData }));
+}
+
+async function loadReadyState({ bufferApiKey, loadBufferData }) {
   if (!bufferApiKey.trim()) {
-    state = {
+    return {
       kind: "missing-key",
       message: "Missing Local Buffer API Key",
       detail: "Add BUFFER_API_KEY to your local .env file, then restart OopsProof.",
     };
-  } else {
-    try {
-      const queue = await loadBufferData({ bufferApiKey });
-      state = {
-        kind: "ready",
-        message: "Loaded live Buffer data",
-        detail: "The Queue Table is ready for live scheduled posts from Buffer.",
-        organization: queue.organization,
-        assessedPosts: assessQueuePosts(sortPostsByDueTime(queue.posts ?? [])),
-      };
-    } catch (error) {
-      state = normalizeLoadError(error);
-    }
   }
 
+  try {
+    const queue = await loadBufferData({ bufferApiKey });
+    return {
+      kind: "ready",
+      message: "Loaded live Buffer data",
+      detail: "The Queue Table is ready for live scheduled posts from Buffer.",
+      organization: queue.organization,
+      assessedPosts: assessQueuePosts(sortPostsByDueTime(queue.posts ?? [])),
+    };
+  } catch (error) {
+    return normalizeLoadError(error);
+  }
+}
+
+function responseFromState(state) {
   return {
     status: 200,
     contentType: "text/html; charset=utf-8",
     cacheControl: "no-store",
     body: renderQueueTableShell(state),
   };
+}
+
+export async function createOopsProofActionResponse({
+  env = process.env,
+  envFilePath = resolve(process.cwd(), ".env"),
+  loadBufferData = loadLiveBufferQueue,
+  createDraftPost = createBufferDraftPost,
+  formData = new URLSearchParams(),
+} = {}) {
+  const localEnv = await readLocalEnv(envFilePath);
+  const bufferApiKey = env.BUFFER_API_KEY || localEnv.BUFFER_API_KEY || "";
+  const state = await loadReadyState({ bufferApiKey, loadBufferData });
+
+  if (state.kind !== "ready") {
+    return responseFromState(state);
+  }
+
+  const postId = formData.get("postId") ?? "";
+  const confirmed = formData.get("confirmed") === "yes";
+  const target = state.assessedPosts.find((assessedPost) => assessedPost.post.id === postId);
+  let quarantineResult;
+
+  if (!confirmed) {
+    quarantineResult = {
+      kind: "failed",
+      message: "Quarantine Confirmation Required",
+      detail: "Confirm that the original Scheduled Post will remain in Buffer before creating a Draft Post.",
+    };
+  } else if (!target?.canQuarantine) {
+    quarantineResult = {
+      kind: "failed",
+      message: "Failed Quarantine",
+      detail: "Only risky Scheduled Posts can be quarantined.",
+    };
+  } else {
+    quarantineResult = await createSafeDraftReplacement({
+      post: target.post,
+      createDraftPost: (draft) => createDraftPost({ bufferApiKey, ...draft }),
+    });
+  }
+
+  return responseFromState({ ...state, quarantineResult });
 }
 
 function normalizeLoadError(error) {
@@ -118,6 +190,7 @@ function parseDotEnv(source) {
 function renderQueueTableShell(state) {
   const isError = state.kind === "missing-key" || state.kind === "invalid-key" || state.kind === "buffer-error";
   const assessedPosts = state.assessedPosts ?? [];
+  const quarantineResult = state.quarantineResult;
 
   return `<!doctype html>
 <html lang="en">
@@ -260,6 +333,8 @@ function renderQueueTableShell(state) {
         <span>${escapeHtml(state.detail)}</span>
       </div>
 
+      ${quarantineResult ? renderQuarantineResult(quarantineResult) : ""}
+
       <div class="regions" aria-label="Queue Table experience">
         <section aria-labelledby="organization-heading">
           <h2 id="organization-heading">Selected Buffer Organization</h2>
@@ -291,6 +366,7 @@ function renderQueueTableShell(state) {
                 <th>Due Time</th>
                 <th>Risk Level</th>
                 <th>Findings</th>
+                <th>Quarantine</th>
               </tr>
             </thead>
             <tbody>${renderPostRows(assessedPosts)}</tbody>
@@ -305,7 +381,7 @@ function renderQueueTableShell(state) {
 function renderPostRows(assessedPosts) {
   return assessedPosts
     .map(
-      ({ post, riskLevel, findings }) => `<tr>
+      ({ post, riskLevel, findings, canQuarantine }) => `<tr>
                 <td class="post-text">
                   ${escapeHtml(post.text)}
                   <div class="meta">
@@ -317,9 +393,32 @@ function renderPostRows(assessedPosts) {
                 <td>${escapeHtml(post.dueAt ?? "")}</td>
                 <td>${escapeHtml(riskLevel)}</td>
                 <td>${renderFindingSummaries(findings)}</td>
+                <td>${canQuarantine ? renderQuarantineForm(post) : ""}</td>
               </tr>`,
     )
     .join("");
+}
+
+function renderQuarantineResult(result) {
+  const isFailed = result.kind === "failed";
+  return `<div class="status" role="${isFailed ? "alert" : "status"}">
+        <strong>${escapeHtml(result.message)}</strong>
+        <span>${escapeHtml(result.detail ?? "")}</span>
+        ${result.draftPostId ? `<span>Draft Post ID: ${escapeHtml(result.draftPostId)}</span>` : ""}
+      </div>`;
+}
+
+function renderQuarantineForm(post) {
+  return `<form method="post" action="/quarantine">
+                  <input type="hidden" name="postId" value="${escapeHtml(post.id)}">
+                  <strong>Quarantine Confirmation</strong>
+                  <p>The original Scheduled Post will remain in Buffer and must be removed manually.</p>
+                  <label>
+                    <input type="checkbox" name="confirmed" value="yes" required>
+                    Create a same-channel Safe Draft Replacement.
+                  </label>
+                  <button type="submit">Quarantine</button>
+                </form>`;
 }
 
 function sortPostsByDueTime(posts) {
@@ -352,6 +451,14 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+async function readRequestBody(request) {
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk;
+  }
+  return body;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

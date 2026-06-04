@@ -46,6 +46,39 @@ export async function loadLiveBufferQueue({
   };
 }
 
+export async function createDraftPost({
+  bufferApiKey,
+  fetch = globalThis.fetch,
+  channelId,
+  text,
+} = {}) {
+  if (!bufferApiKey || !bufferApiKey.trim()) {
+    throw new BufferClientError("missing-key", "Missing Local Buffer API Key");
+  }
+  if (typeof fetch !== "function") {
+    throw new BufferClientError("network", "Fetch is not available in this Node runtime.");
+  }
+
+  const data = await requestBufferGraphQL({
+    bufferApiKey,
+    fetch,
+    query: CREATE_DRAFT_POST_MUTATION,
+    variables: {
+      input: {
+        channelId,
+        text,
+        saveToDraft: true,
+      },
+    },
+  });
+  const draftPost = data.createPost?.post;
+  if (!draftPost?.id) {
+    throw new BufferClientError("graphql", "Buffer did not return a Draft Post ID.");
+  }
+
+  return { id: draftPost.id };
+}
+
 async function loadScheduledPosts({ bufferApiKey, fetch, organizationId, channelIds, now }) {
   const dueAfter = now.toISOString();
   const dueBefore = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -196,6 +229,16 @@ const GET_SCHEDULED_POSTS_QUERY = `
       pageInfo {
         hasNextPage
         endCursor
+      }
+    }
+  }
+`;
+
+const CREATE_DRAFT_POST_MUTATION = `
+  mutation CreateDraftPost($input: CreatePostInput!) {
+    createPost(input: $input) {
+      post {
+        id
       }
     }
   }

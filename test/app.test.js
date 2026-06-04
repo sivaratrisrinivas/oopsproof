@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { BufferClientError } from "../src/bufferClient.js";
-import { createOopsProofResponse } from "../src/server.js";
+import { createOopsProofActionResponse, createOopsProofResponse } from "../src/server.js";
 
 test("initial route shows missing Local Buffer API Key state without fake fallback data", async () => {
   const directory = await mkdtemp(join(tmpdir(), "oopsproof-"));
@@ -200,11 +200,113 @@ test("Clear Posts remain visible without Quarantine or other action controls", a
     }),
   });
 
-  const clearRow = response.body.match(/<tr>[\s\S]*A simple evergreen update for the queue[\s\S]*?<\/tr>/)?.[0] ?? "";
+  const clearRow =
+    response.body.match(/<tbody><tr>[\s\S]*A simple evergreen update for the queue[\s\S]*?<\/tr>/)?.[0] ??
+    "";
 
   assert.match(clearRow, /Clear/);
   assert.match(clearRow, /No Findings/);
   assert.doesNotMatch(clearRow, /<details|Inspect Findings|Quarantine|<button/i);
+});
+
+test("risky Scheduled Posts offer Quarantine Confirmation before draft creation", async () => {
+  let draftCreationCount = 0;
+  const response = await createOopsProofResponse({
+    env: { BUFFER_API_KEY: "server-key" },
+    createDraftPost: async () => {
+      draftCreationCount += 1;
+      return { id: "draft-123" };
+    },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [
+        {
+          id: "post-risky",
+          text: "LaunchKit ships today for early partners",
+          channelId: "channel-x",
+          channelName: "Founder X",
+          service: "twitter",
+          status: "scheduled",
+          dueAt: "2026-06-10T12:00:00.000Z",
+          createdAt: "2026-06-01T09:00:00.000Z",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(draftCreationCount, 0);
+  assert.match(response.body, /Quarantine/);
+  assert.match(response.body, /Quarantine Confirmation/);
+  assert.match(response.body, /The original Scheduled Post will remain in Buffer and must be removed manually\./);
+});
+
+test("confirmed Quarantine creates a Safe Draft Replacement and shows the Draft Post ID", async () => {
+  const createdDrafts = [];
+  const originalText = "LaunchKit ships today for early partners";
+  const response = await createOopsProofActionResponse({
+    env: { BUFFER_API_KEY: "server-key" },
+    formData: new URLSearchParams("postId=post-risky&confirmed=yes"),
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [
+        {
+          id: "post-risky",
+          text: originalText,
+          channelId: "channel-x",
+          channelName: "Founder X",
+          service: "twitter",
+          status: "scheduled",
+          dueAt: "2026-06-10T12:00:00.000Z",
+          createdAt: "2026-06-01T09:00:00.000Z",
+        },
+      ],
+    }),
+    createDraftPost: async (draft) => {
+      createdDrafts.push(draft);
+      return { id: "draft-123" };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(createdDrafts, [
+    {
+      bufferApiKey: "server-key",
+      channelId: "channel-x",
+      text: `Needs review before publishing: ${originalText.slice(0, 80)}`,
+    },
+  ]);
+  assert.match(response.body, /Safe draft created\. Remove the original scheduled post in Buffer\./);
+  assert.match(response.body, /Draft Post ID: draft-123/);
+  assert.doesNotMatch(response.body, /Risk removed from queue|delete|deleted|removed the original/i);
+});
+
+test("Failed Quarantine shows the Buffer error without false success copy", async () => {
+  const response = await createOopsProofActionResponse({
+    env: { BUFFER_API_KEY: "server-key" },
+    formData: new URLSearchParams("postId=post-risky&confirmed=yes"),
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [
+        {
+          id: "post-risky",
+          text: "LaunchKit ships today for early partners",
+          channelId: "channel-x",
+          channelName: "Founder X",
+          service: "twitter",
+          status: "scheduled",
+          dueAt: "2026-06-10T12:00:00.000Z",
+          createdAt: "2026-06-01T09:00:00.000Z",
+        },
+      ],
+    }),
+    createDraftPost: async () => {
+      throw new Error("Buffer draft creation failed");
+    },
+  });
+
+  assert.match(response.body, /Failed Quarantine/);
+  assert.match(response.body, /Buffer draft creation failed/);
+  assert.doesNotMatch(response.body, /Safe draft created\. Remove the original scheduled post in Buffer\./);
 });
 
 test("initial route shows invalid Local Buffer API Key state for Buffer auth failures", async () => {

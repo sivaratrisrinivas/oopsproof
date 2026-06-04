@@ -20,6 +20,12 @@ The first usable screen is the Queue Table. It shows every Scheduled Post in the
 
 OopsProof runs deterministic diagnosis with the v1 Risk Rules: Embargo Term Rule, Stale Relative Date Rule, and Duplicate Opening Rule. Each row shows the post's highest Risk Level. Risky Scheduled Posts can be opened to inspect every Finding. Clear Posts stay visible for context and have no Quarantine or other action control.
 
+## Quarantine
+
+Risky Scheduled Posts offer Quarantine Confirmation before OopsProof touches Buffer. Confirmed Quarantine creates a same-channel Draft Post with `saveToDraft: true` and the Safe Draft Replacement text `Needs review before publishing: {original first 80 characters}`.
+
+OopsProof does not delete or edit the original Scheduled Post. On success it shows the Draft Post ID and exactly: `Safe draft created. Remove the original scheduled post in Buffer.` Failed Quarantine shows the Buffer error without success copy.
+
 ## How
 
 Create a local `.env` file with your Buffer API key:

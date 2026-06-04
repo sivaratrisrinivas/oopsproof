@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BufferClientError, loadLiveBufferQueue } from "../src/bufferClient.js";
+import { BufferClientError, createDraftPost, loadLiveBufferQueue } from "../src/bufferClient.js";
 
 test("loads the first Buffer Organization, scans all channels, and normalizes Scheduled Posts", async () => {
   const requests = [];
@@ -224,6 +224,38 @@ test("normalizes Buffer GraphQL errors that are not auth failures", async () => 
       return true;
     },
   );
+});
+
+test("creates a Draft Post through Buffer createPost with saveToDraft enabled", async () => {
+  let requestBody;
+  const fetch = async (url, options) => {
+    requestBody = JSON.parse(options.body);
+
+    return jsonResponse({
+      data: {
+        createPost: {
+          post: {
+            id: "draft-123",
+          },
+        },
+      },
+    });
+  };
+
+  const draft = await createDraftPost({
+    bufferApiKey: "server-key",
+    fetch,
+    channelId: "channel-x",
+    text: "Needs review before publishing: LaunchKit ships today",
+  });
+
+  assert.equal(draft.id, "draft-123");
+  assert.match(requestBody.query, /mutation CreateDraftPost/);
+  assert.deepEqual(requestBody.variables.input, {
+    channelId: "channel-x",
+    text: "Needs review before publishing: LaunchKit ships today",
+    saveToDraft: true,
+  });
 });
 
 function jsonResponse(payload, { status = 200 } = {}) {
