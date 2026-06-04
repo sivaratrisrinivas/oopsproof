@@ -32,7 +32,13 @@ Risky Scheduled Posts offer Quarantine Confirmation before OopsProof touches Buf
 
 OopsProof does not delete or edit the original Scheduled Post. On success it shows the Draft Post ID and exactly: `Safe draft created. Remove the original scheduled post in Buffer.` Failed Quarantine shows the Buffer error without success copy.
 
-## How
+## First-Time Setup
+
+Install dependencies:
+
+```bash
+npm install
+```
 
 Create a local `.env` file with your Buffer API key:
 
@@ -40,13 +46,13 @@ Create a local `.env` file with your Buffer API key:
 BUFFER_API_KEY=your_buffer_api_key
 ```
 
-Run the test suite:
+Run the automated test suite:
 
 ```bash
 npm test
 ```
 
-Automated tests do not require Buffer credentials or live Buffer calls. Optional live Buffer verification steps are documented in [docs/verification.md](docs/verification.md).
+Automated tests do not require Buffer credentials or live Buffer calls.
 
 Start the local app:
 
@@ -57,3 +63,20 @@ npm run dev
 Then open `http://localhost:3000`.
 
 If `BUFFER_API_KEY` is missing or Buffer rejects it, OopsProof stops before loading Buffer data and shows a clear error. The `.env` file is ignored by git and must not be committed.
+
+## End-to-End Verification
+
+Use a real Buffer account for live verification. OopsProof never uses fake posts, seeded posts, or demo fallback data, so the Queue Table only reflects live Buffer data visible to your API key.
+
+1. In Buffer, create at least one Scheduled Post due in the next 30 days.
+2. Start OopsProof with `npm run dev` and open `http://localhost:3000`.
+3. Verify the Queue Table shows the selected Buffer Organization and your Scheduled Post.
+4. Press Refresh. The page should stay on the Queue Table and reload live Buffer data.
+5. To verify risk detection, create or edit a Scheduled Post before `2026-07-01` with text like `LaunchKit ships today for early partners`, then press Refresh.
+6. Verify the risky row shows a High Risk Level and Findings for the embargo term and stale relative date phrase.
+7. Check the Quarantine Confirmation checkbox and click Quarantine.
+8. Verify OopsProof shows a Draft Post ID and exactly `Safe draft created. Remove the original scheduled post in Buffer.`
+9. Open Buffer and verify a same-channel Draft Post was created with text starting `Needs review before publishing: `.
+10. Verify the original Scheduled Post still exists in Buffer. Remove it manually if you do not want it to publish.
+
+Full verification notes are documented in [docs/verification.md](docs/verification.md).
