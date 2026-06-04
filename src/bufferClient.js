@@ -1,3 +1,5 @@
+import { buildQueuePosts } from "./queueModel.js";
+
 const BUFFER_GRAPHQL_ENDPOINT = "https://api.buffer.com";
 const POST_PAGE_SIZE = 50;
 
@@ -42,7 +44,7 @@ export async function loadLiveBufferQueue({
   return {
     organization: normalizeOrganization(organization),
     channels: channels.map(normalizeChannel),
-    posts: normalizeQueuePosts({ posts, channels }),
+    posts: buildQueuePosts({ posts, channels, now }),
   };
 }
 
@@ -71,12 +73,22 @@ export async function createDraftPost({
       },
     },
   });
+  const mutationErrorMessage = firstMutationErrorMessage(data.createPost);
+  if (mutationErrorMessage) {
+    throw new BufferClientError("mutation", mutationErrorMessage);
+  }
+
   const draftPost = data.createPost?.post;
   if (!draftPost?.id) {
     throw new BufferClientError("graphql", "Buffer did not return a Draft Post ID.");
   }
 
   return { id: draftPost.id };
+}
+
+function firstMutationErrorMessage(mutationResult) {
+  const mutationError = mutationResult?.mutationErrors?.[0] ?? mutationResult?.userErrors?.[0];
+  return mutationError?.message ?? "";
 }
 
 async function loadScheduledPosts({ bufferApiKey, fetch, organizationId, channelIds, now }) {
@@ -128,26 +140,6 @@ async function requestBufferGraphQL({ bufferApiKey, fetch, query, variables = {}
     throw new BufferClientError("network", `Buffer request failed with HTTP ${response.status}.`);
   }
   return payload.data ?? {};
-}
-
-function normalizeQueuePosts({ posts, channels }) {
-  const channelsById = new Map(channels.map((channel) => [channel.id, normalizeChannel(channel)]));
-
-  return posts
-    .map((post) => {
-      const channel = channelsById.get(post.channelId) ?? {};
-      return {
-        id: post.id,
-        text: post.text ?? "",
-        channelId: post.channelId ?? "",
-        channelName: channel.name ?? "",
-        service: channel.service ?? "",
-        status: post.status ?? "scheduled",
-        dueAt: post.dueAt ?? null,
-        createdAt: post.createdAt ?? null,
-      };
-    })
-    .sort((left, right) => String(left.dueAt ?? "").localeCompare(String(right.dueAt ?? "")));
 }
 
 function normalizeOrganization(organization) {

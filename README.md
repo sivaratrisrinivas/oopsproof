@@ -46,6 +46,8 @@ Run the test suite:
 npm test
 ```
 
+Automated tests do not require Buffer credentials or live Buffer calls. Optional live Buffer verification steps are documented in [docs/verification.md](docs/verification.md).
+
 Start the local app:
 
 ```bash

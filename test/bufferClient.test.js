@@ -3,6 +3,28 @@ import { test } from "node:test";
 
 import { BufferClientError, createDraftPost, loadLiveBufferQueue } from "../src/bufferClient.js";
 
+test("rejects a missing Local Buffer API Key before issuing Buffer requests", async () => {
+  let requestCount = 0;
+
+  await assert.rejects(
+    loadLiveBufferQueue({
+      bufferApiKey: "   ",
+      fetch: async () => {
+        requestCount += 1;
+        return jsonResponse({ data: {} });
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof BufferClientError);
+      assert.equal(error.kind, "missing-key");
+      assert.equal(error.message, "Missing Local Buffer API Key");
+      return true;
+    },
+  );
+
+  assert.equal(requestCount, 0);
+});
+
 test("loads the first Buffer Organization, scans all channels, and normalizes Scheduled Posts", async () => {
   const requests = [];
   const fetch = async (url, options) => {
@@ -256,6 +278,33 @@ test("creates a Draft Post through Buffer createPost with saveToDraft enabled", 
     text: "Needs review before publishing: LaunchKit ships today",
     saveToDraft: true,
   });
+});
+
+test("normalizes Buffer MutationError responses from draft creation", async () => {
+  const fetch = async () =>
+    jsonResponse({
+      data: {
+        createPost: {
+          post: null,
+          mutationErrors: [{ message: "Text is too long" }],
+        },
+      },
+    });
+
+  await assert.rejects(
+    createDraftPost({
+      bufferApiKey: "server-key",
+      fetch,
+      channelId: "channel-x",
+      text: "Needs review before publishing: LaunchKit ships today",
+    }),
+    (error) => {
+      assert.ok(error instanceof BufferClientError);
+      assert.equal(error.kind, "mutation");
+      assert.equal(error.message, "Text is too long");
+      return true;
+    },
+  );
 });
 
 function jsonResponse(payload, { status = 200 } = {}) {
