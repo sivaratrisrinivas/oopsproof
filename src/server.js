@@ -2,12 +2,14 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { BufferClientError, loadLiveBufferQueue } from "./bufferClient.js";
+
 const DEFAULT_PORT = 3000;
 
 export function createOopsProofServer({
   env = process.env,
   envFilePath = resolve(process.cwd(), ".env"),
-  loadBufferData = async () => ({ posts: [] }),
+  loadBufferData = loadLiveBufferQueue,
 } = {}) {
   return createServer(async (request, response) => {
     if (request.method !== "GET" || request.url !== "/") {
@@ -28,7 +30,7 @@ export function createOopsProofServer({
 export async function createOopsProofResponse({
   env = process.env,
   envFilePath = resolve(process.cwd(), ".env"),
-  loadBufferData = async () => ({ posts: [] }),
+  loadBufferData = loadLiveBufferQueue,
 } = {}) {
   const localEnv = await readLocalEnv(envFilePath);
   const bufferApiKey = env.BUFFER_API_KEY || localEnv.BUFFER_API_KEY || "";
@@ -41,12 +43,18 @@ export async function createOopsProofResponse({
       detail: "Add BUFFER_API_KEY to your local .env file, then restart OopsProof.",
     };
   } else {
-    await loadBufferData({ bufferApiKey });
-    state = {
-      kind: "ready",
-      message: "Loading live Buffer data",
-      detail: "The Queue Table is ready for live scheduled posts from Buffer.",
-    };
+    try {
+      const queue = await loadBufferData({ bufferApiKey });
+      state = {
+        kind: "ready",
+        message: "Loaded live Buffer data",
+        detail: "The Queue Table is ready for live scheduled posts from Buffer.",
+        organization: queue.organization,
+        posts: queue.posts ?? [],
+      };
+    } catch (error) {
+      state = normalizeLoadError(error);
+    }
   }
 
   return {
@@ -54,6 +62,22 @@ export async function createOopsProofResponse({
     contentType: "text/html; charset=utf-8",
     cacheControl: "no-store",
     body: renderQueueTableShell(state),
+  };
+}
+
+function normalizeLoadError(error) {
+  if (error instanceof BufferClientError && error.kind === "invalid-key") {
+    return {
+      kind: "invalid-key",
+      message: "Invalid Local Buffer API Key",
+      detail: "Buffer rejected the Local Buffer API Key. Check BUFFER_API_KEY, then restart OopsProof.",
+    };
+  }
+
+  return {
+    kind: "buffer-error",
+    message: "Buffer data could not load",
+    detail: error.message || "Buffer returned an unexpected error.",
   };
 }
 
@@ -91,7 +115,8 @@ function parseDotEnv(source) {
 }
 
 function renderQueueTableShell(state) {
-  const isMissingKey = state.kind === "missing-key";
+  const isError = state.kind === "missing-key" || state.kind === "invalid-key" || state.kind === "buffer-error";
+  const posts = state.posts ?? [];
 
   return `<!doctype html>
 <html lang="en">
@@ -142,8 +167,8 @@ function renderQueueTableShell(state) {
       }
 
       .status {
-        border: 1px solid ${isMissingKey ? "#f3a8a8" : "#b8d2ff"};
-        background: ${isMissingKey ? "#fff5f5" : "#eef6ff"};
+        border: 1px solid ${isError ? "#f3a8a8" : "#b8d2ff"};
+        background: ${isError ? "#fff5f5" : "#eef6ff"};
         border-radius: 8px;
         padding: 16px;
         margin-bottom: 20px;
@@ -152,7 +177,7 @@ function renderQueueTableShell(state) {
       .status strong {
         display: block;
         margin-bottom: 4px;
-        color: ${isMissingKey ? "#9b1c1c" : "#134f94"};
+        color: ${isError ? "#9b1c1c" : "#134f94"};
       }
 
       .regions {
@@ -189,6 +214,15 @@ function renderQueueTableShell(state) {
       .empty {
         color: #637089;
       }
+
+      .meta {
+        display: grid;
+        gap: 4px;
+      }
+
+      .post-text {
+        overflow-wrap: anywhere;
+      }
     </style>
   </head>
   <body>
@@ -200,25 +234,30 @@ function renderQueueTableShell(state) {
         </div>
       </header>
 
-      <div class="status" role="${isMissingKey ? "alert" : "status"}">
+      <div class="status" role="${isError ? "alert" : "status"}">
         <strong>${escapeHtml(state.message)}</strong>
         <span>${escapeHtml(state.detail)}</span>
       </div>
 
       <div class="regions" aria-label="Queue Table experience">
+        <section aria-labelledby="organization-heading">
+          <h2 id="organization-heading">Selected Buffer Organization</h2>
+          <p>${state.organization ? escapeHtml(state.organization.name) : "No Buffer Organization selected."}</p>
+        </section>
+
         <section aria-labelledby="loading-heading">
           <h2 id="loading-heading">Loading</h2>
-          <p>${isMissingKey ? "Stopped before loading Buffer data." : "Loading scheduled posts from Buffer."}</p>
+          <p>${isError ? "Stopped before loading Buffer data." : "Loaded scheduled posts from Buffer."}</p>
         </section>
 
         <section aria-labelledby="error-heading">
           <h2 id="error-heading">Error</h2>
-          <p>${isMissingKey ? escapeHtml(state.message) : "No Buffer error."}</p>
+          <p>${isError ? escapeHtml(state.message) : "No Buffer error."}</p>
         </section>
 
         <section aria-labelledby="empty-heading">
           <h2 id="empty-heading">Empty Queue</h2>
-          <p class="empty">No scheduled posts found in the next 30 days</p>
+          <p class="empty">${posts.length === 0 ? "No scheduled posts found in the next 30 days" : "Scheduled posts found in the next 30 days"}</p>
         </section>
 
         <section aria-labelledby="table-heading">
@@ -233,7 +272,7 @@ function renderQueueTableShell(state) {
                 <th>Findings</th>
               </tr>
             </thead>
-            <tbody></tbody>
+            <tbody>${renderPostRows(posts)}</tbody>
           </table>
         </section>
       </div>
@@ -242,8 +281,25 @@ function renderQueueTableShell(state) {
 </html>`;
 }
 
+function renderPostRows(posts) {
+  return posts
+    .map(
+      (post) => `<tr>
+                <td class="post-text">
+                  ${escapeHtml(post.text)}
+                  <div class="meta">${escapeHtml(post.service)} &middot; ${escapeHtml(post.status)}</div>
+                </td>
+                <td>${escapeHtml(post.channelName)}</td>
+                <td>${escapeHtml(post.dueAt ?? "")}</td>
+                <td>Clear</td>
+                <td>No Findings</td>
+              </tr>`,
+    )
+    .join("");
+}
+
 function escapeHtml(value) {
-  return value
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
