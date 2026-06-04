@@ -19,7 +19,9 @@ export function createOopsProofServer({
   createDraftPost = createBufferDraftPost,
 } = {}) {
   return createServer(async (request, response) => {
-    if (request.method === "GET" && request.url === "/") {
+    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+
+    if (request.method === "GET" && pathname === "/") {
       const appResponse = await createOopsProofResponse({ env, envFilePath, loadBufferData });
       response.writeHead(200, {
         "content-type": appResponse.contentType,
@@ -29,7 +31,7 @@ export function createOopsProofServer({
       return;
     }
 
-    if (request.method === "POST" && request.url === "/quarantine") {
+    if (request.method === "POST" && pathname === "/quarantine") {
       const appResponse = await createOopsProofActionResponse({
         env,
         envFilePath,

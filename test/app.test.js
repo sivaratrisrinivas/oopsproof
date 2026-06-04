@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { BufferClientError } from "../src/bufferClient.js";
-import { createOopsProofActionResponse, createOopsProofResponse } from "../src/server.js";
+import {
+  createOopsProofActionResponse,
+  createOopsProofResponse,
+  createOopsProofServer,
+} from "../src/server.js";
 
 test("initial route shows missing Local Buffer API Key state without fake fallback data", async () => {
   const directory = await mkdtemp(join(tmpdir(), "oopsproof-"));
@@ -437,3 +441,84 @@ test("initial route shows invalid Local Buffer API Key state for Buffer auth fai
   assert.match(response.body, /Stopped before loading Buffer data/);
   assert.doesNotMatch(response.body, new RegExp(secret));
 });
+
+test("HTTP Refresh route renders the Queue Table even when the request URL has a query string", async () => {
+  const server = createOopsProofServer({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [],
+    }),
+  });
+
+  const response = await requestServer(server, { method: "GET", url: "/?refresh=manual" });
+
+  assert.equal(response.status, 200);
+  assert.match(response.body, /Queue Table/);
+  assert.doesNotMatch(response.body, /Not found/);
+});
+
+test("HTTP Quarantine route accepts form posts even when the request URL has a query string", async () => {
+  const createdDrafts = [];
+  const server = createOopsProofServer({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [
+        {
+          id: "post-risky",
+          text: "LaunchKit ships today for early partners",
+          channelId: "channel-x",
+          channelName: "Founder X",
+          service: "twitter",
+          status: "scheduled",
+          dueAt: "2026-06-10T12:00:00.000Z",
+          createdAt: "2026-06-01T09:00:00.000Z",
+        },
+      ],
+    }),
+    createDraftPost: async (draft) => {
+      createdDrafts.push(draft);
+      return { id: "draft-123" };
+    },
+  });
+
+  const response = await requestServer(server, {
+    method: "POST",
+    url: "/quarantine?from=queue",
+    body: "postId=post-risky&confirmed=yes",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(createdDrafts.length, 1);
+  assert.match(response.body, /Safe draft created\. Remove the original scheduled post in Buffer\./);
+  assert.match(response.body, /Draft Post ID: draft-123/);
+  assert.doesNotMatch(response.body, /Not found/);
+});
+
+async function requestServer(server, { method, url, body = "" }) {
+  const requestHandler = server.listeners("request")[0];
+  let status = 0;
+  let responseBody = "";
+  const request = {
+    method,
+    url,
+    async *[Symbol.asyncIterator]() {
+      if (body) {
+        yield body;
+      }
+    },
+  };
+  const response = {
+    writeHead(nextStatus) {
+      status = nextStatus;
+    },
+    end(nextBody) {
+      responseBody = nextBody;
+    },
+  };
+
+  await requestHandler(request, response);
+
+  return { status, body: responseBody };
+}
