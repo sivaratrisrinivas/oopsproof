@@ -273,20 +273,24 @@ test("creates a Draft Post through Buffer createPost with saveToDraft enabled", 
 
   assert.equal(draft.id, "draft-123");
   assert.match(requestBody.query, /mutation CreateDraftPost/);
+  assert.match(requestBody.query, /\.\.\. on PostActionSuccess/);
+  assert.match(requestBody.query, /\.\.\. on MutationError/);
   assert.deepEqual(requestBody.variables.input, {
     channelId: "channel-x",
     text: "Needs review before publishing: LaunchKit ships today",
+    schedulingType: "automatic",
+    mode: "addToQueue",
     saveToDraft: true,
   });
 });
 
-test("normalizes Buffer MutationError responses from draft creation", async () => {
+test("normalizes Buffer union MutationError responses from draft creation", async () => {
   const fetch = async () =>
     jsonResponse({
       data: {
         createPost: {
           post: null,
-          mutationErrors: [{ message: "Text is too long" }],
+          message: "Text is too long",
         },
       },
     });

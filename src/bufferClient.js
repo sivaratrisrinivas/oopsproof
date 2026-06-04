@@ -69,6 +69,8 @@ export async function createDraftPost({
       input: {
         channelId,
         text,
+        schedulingType: "automatic",
+        mode: "addToQueue",
         saveToDraft: true,
       },
     },
@@ -88,6 +90,9 @@ export async function createDraftPost({
 
 function firstMutationErrorMessage(mutationResult) {
   const mutationError = mutationResult?.mutationErrors?.[0] ?? mutationResult?.userErrors?.[0];
+  if (mutationResult?.message && !mutationResult?.post) {
+    return mutationResult.message;
+  }
   return mutationError?.message ?? "";
 }
 
@@ -229,8 +234,13 @@ const GET_SCHEDULED_POSTS_QUERY = `
 const CREATE_DRAFT_POST_MUTATION = `
   mutation CreateDraftPost($input: CreatePostInput!) {
     createPost(input: $input) {
-      post {
-        id
+      ... on PostActionSuccess {
+        post {
+          id
+        }
+      }
+      ... on MutationError {
+        message
       }
     }
   }
