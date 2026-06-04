@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { BufferClientError, loadLiveBufferQueue } from "./bufferClient.js";
+import { assessQueuePosts } from "./riskEngine.js";
 
 const DEFAULT_PORT = 3000;
 
@@ -50,7 +51,7 @@ export async function createOopsProofResponse({
         message: "Loaded live Buffer data",
         detail: "The Queue Table is ready for live scheduled posts from Buffer.",
         organization: queue.organization,
-        posts: queue.posts ?? [],
+        assessedPosts: assessQueuePosts(sortPostsByDueTime(queue.posts ?? [])),
       };
     } catch (error) {
       state = normalizeLoadError(error);
@@ -116,7 +117,7 @@ function parseDotEnv(source) {
 
 function renderQueueTableShell(state) {
   const isError = state.kind === "missing-key" || state.kind === "invalid-key" || state.kind === "buffer-error";
-  const posts = state.posts ?? [];
+  const assessedPosts = state.assessedPosts ?? [];
 
   return `<!doctype html>
 <html lang="en">
@@ -223,6 +224,26 @@ function renderQueueTableShell(state) {
       .post-text {
         overflow-wrap: anywhere;
       }
+
+      details {
+        display: grid;
+        gap: 8px;
+      }
+
+      summary {
+        cursor: pointer;
+        color: #134f94;
+        font-weight: 700;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
     </style>
   </head>
   <body>
@@ -257,7 +278,7 @@ function renderQueueTableShell(state) {
 
         <section aria-labelledby="empty-heading">
           <h2 id="empty-heading">Empty Queue</h2>
-          <p class="empty">${posts.length === 0 ? "No scheduled posts found in the next 30 days" : "Scheduled posts found in the next 30 days"}</p>
+          <p class="empty">${assessedPosts.length === 0 ? "No scheduled posts found in the next 30 days" : "Scheduled posts found in the next 30 days"}</p>
         </section>
 
         <section aria-labelledby="table-heading">
@@ -272,7 +293,7 @@ function renderQueueTableShell(state) {
                 <th>Findings</th>
               </tr>
             </thead>
-            <tbody>${renderPostRows(posts)}</tbody>
+            <tbody>${renderPostRows(assessedPosts)}</tbody>
           </table>
         </section>
       </div>
@@ -281,21 +302,48 @@ function renderQueueTableShell(state) {
 </html>`;
 }
 
-function renderPostRows(posts) {
-  return posts
+function renderPostRows(assessedPosts) {
+  return assessedPosts
     .map(
-      (post) => `<tr>
+      ({ post, riskLevel, findings }) => `<tr>
                 <td class="post-text">
                   ${escapeHtml(post.text)}
-                  <div class="meta">${escapeHtml(post.service)} &middot; ${escapeHtml(post.status)}</div>
+                  <div class="meta">
+                    <span>${escapeHtml(post.service)} &middot; ${escapeHtml(post.status)}</span>
+                    ${post.createdAt ? `<span>Created ${escapeHtml(post.createdAt)}</span>` : ""}
+                  </div>
                 </td>
                 <td>${escapeHtml(post.channelName)}</td>
                 <td>${escapeHtml(post.dueAt ?? "")}</td>
-                <td>Clear</td>
-                <td>No Findings</td>
+                <td>${escapeHtml(riskLevel)}</td>
+                <td>${renderFindingSummaries(findings)}</td>
               </tr>`,
     )
     .join("");
+}
+
+function sortPostsByDueTime(posts) {
+  return [...posts].sort((left, right) => timestamp(left.dueAt) - timestamp(right.dueAt));
+}
+
+function timestamp(value) {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function renderFindingSummaries(findings) {
+  if (findings.length === 0) {
+    return "No Findings";
+  }
+
+  return `<details>
+                  <summary>Inspect Findings</summary>
+                  <ul>${findings.map(renderFinding).join("")}</ul>
+                </details>`;
+}
+
+function renderFinding(finding) {
+  return `<li><strong>${escapeHtml(finding.rule)}</strong>: ${escapeHtml(finding.summary)}</li>`;
 }
 
 function escapeHtml(value) {

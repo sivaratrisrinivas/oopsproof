@@ -14,6 +14,12 @@ OopsProof uses the first Buffer Organization returned for the local API key, sca
 
 Scheduled Post loading follows Buffer cursor pagination using `pageInfo.hasNextPage` and `pageInfo.endCursor`. Buffer API calls are made only from the local Node server with `Authorization: Bearer <BUFFER_API_KEY>`.
 
+## Queue Table
+
+The first usable screen is the Queue Table. It shows every Scheduled Post in the scan window, ordered by due time, with post text, Buffer channel, service, status, due time, created time when available, Risk Level, and Findings.
+
+OopsProof runs deterministic diagnosis with the v1 Risk Rules: Embargo Term Rule, Stale Relative Date Rule, and Duplicate Opening Rule. Each row shows the post's highest Risk Level. Risky Scheduled Posts can be opened to inspect every Finding. Clear Posts stay visible for context and have no Quarantine or other action control.
+
 ## How
 
 Create a local `.env` file with your Buffer API key:
