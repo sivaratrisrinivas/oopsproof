@@ -99,3 +99,23 @@ Use a real Buffer account for live verification. OopsProof never uses fake posts
 11. Verify the original Scheduled Post still exists in Buffer. Remove it manually if you do not want it to publish.
 
 Full verification notes are documented in [docs/verification.md](docs/verification.md).
+
+## Deploying To Vercel
+
+OopsProof can run on Vercel through the serverless handler in `api/index.js`. The local `npm run dev` flow still uses `src/server.js`; production traffic on Vercel is routed to the serverless handler by `vercel.json`.
+
+Before deploying, add `BUFFER_API_KEY` as a Vercel Project Environment Variable. Do not upload or commit a local `.env` file.
+
+Deploy from the Vercel dashboard by importing this repository, or deploy with the Vercel CLI:
+
+```bash
+npx vercel
+```
+
+For production:
+
+```bash
+npx vercel --prod
+```
+
+After deployment, open the Vercel URL and run the same End-to-End Verification flow above. Buffer API calls still happen server-side, and automated tests still avoid live Buffer calls.
