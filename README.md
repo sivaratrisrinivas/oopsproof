@@ -4,7 +4,19 @@
 
 OopsProof is a local web app for inspecting Buffer scheduled posts before they publish. It features a streamlined, high-polish 3-screen experience (Queue → Inspect → Quarantine) designed so the core objective — finding and safely quarantining a risky scheduled post — can be completed in no more than 3 clicks, with only one primary action per screen. It reads live Buffer data from the server, shows the selected Buffer Organization, and lists normalized Scheduled Posts due in the next 30 days.
 
-Risky posts are visually prioritized on the Queue with color-coded cards. Clear posts remain visible for context but offer no actions. Every interaction has been crafted with meticulous attention to detail for a premium, trustworthy feel.
+The interface uses a Buffer.com-inspired color palette (warm off-white backgrounds, soft green primary actions with dark text, and warm neutral tones) and is structured as a proper desktop web application — full-width sticky top navigation bar, 1080px content container, and a 2-column layout on the Inspect screen (post on the left, sticky risk summary + action panel on the right) — instead of a narrow mobile-style view. Risky posts are visually prioritized on the Queue with color-coded left borders. Clear posts remain visible for context but offer no actions. Every interaction has been crafted with meticulous attention to detail for a premium, trustworthy feel.
+
+## Design
+
+The UI was fully redesigned to match Buffer.com's visual language (warm `#fefefb` backgrounds, `#213130` text, signature soft green `#b0ec9c` primary CTAs with dark text, and warm neutral borders) while shifting from a narrow mobile-app feel to a proper desktop web/SaaS experience:
+
+- Full-width sticky top navigation bar with organization name and Refresh
+- 1080px content container with generous spacing
+- Wider Queue cards with improved meta layout
+- 2-column Inspect view (post + sticky risk + action side panel)
+- Updated risk color system that remains clearly distinguishable while fitting the warmer Buffer palette
+
+The experience retains its Emil Kowalski-level attention to detail, one primary action per screen, and progressive enhancements (copy buttons, checkbox gating, keyboard support).
 
 ## Why
 
@@ -18,21 +30,21 @@ Scheduled Post loading follows Buffer cursor pagination using `pageInfo.hasNextP
 
 ## The Queue (Screen 1)
 
-The main screen is the Queue. Risky Scheduled Posts (those with High or Medium findings) are shown first with prominent color-coded left borders (rose for High, amber for Medium), an excerpt of the post text, channel/service, nicely formatted due time, risk level badge, and a primary "Review →" action. 
+The main screen is the Queue. Risky Scheduled Posts (those with High or Medium findings) are shown first with prominent color-coded left borders (updated high/medium tones in the Buffer palette), an excerpt of the post text, channel/service, nicely formatted due time, risk level badge, and a primary "Review →" action. 
 
-Clear posts (no findings) appear below in a subdued section for full context but carry no quarantine controls.
+Clear posts (no findings) appear below in a subdued section for full context but carry no quarantine controls. The UI uses a wider desktop layout with comfortable spacing and a persistent top navigation bar.
 
 OopsProof runs deterministic diagnosis with the v1 Risk Rules: Embargo Term Rule, Stale Relative Date Rule, and Duplicate Opening Rule. Risk level is the highest across all findings for a post. Clicking Review on a risky post takes you to the dedicated Inspect screen for the complete text and every Finding.
 
 ## Refresh
 
-A Refresh button is always available in the header. It fetches live Buffer data again from the server, re-runs deterministic diagnosis against the newly loaded Scheduled Posts, and renders the current Queue (or error/empty state).
+A Refresh button is always available in the sticky top navigation bar. It fetches live Buffer data again from the server, re-runs deterministic diagnosis against the newly loaded Scheduled Posts, and renders the current Queue (or error/empty state).
 
 OopsProof v1 does not auto-refresh, poll Buffer, or store Quarantine History. The current Buffer queue remains the source of truth after each refresh. The entire experience is server-rendered with progressive enhancements for delightful interactions (e.g. copy-to-clipboard on success, checkbox-gated action).
 
 ## Quarantine (Screens 2 & 3)
 
-From the Queue, "Review" takes you to the Inspect screen (Screen 2) showing the full post text, metadata, and all Findings. The single action here is "Quarantine this post", which leads to the dedicated Quarantine screen (Screen 3).
+From the Queue, "Review" takes you to the Inspect screen (Screen 2) showing the full post text, metadata, and all Findings in a desktop-friendly 2-column layout (main post content on the left, sticky "Risk summary" panel with findings and the primary action on the right; collapses to single column on smaller screens). The single action here is "Quarantine this post", which leads to the dedicated Quarantine screen (Screen 3).
 
 The Quarantine screen presents the exact Safe Draft Replacement text that will be created (`Needs review before publishing: {original first 80 characters}`), a clear explanation that the original Scheduled Post will remain in Buffer (and must be removed manually), and a required confirmation checkbox before the primary "Create Safe Draft" action.
 

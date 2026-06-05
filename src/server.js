@@ -233,28 +233,36 @@ function renderShell(state, content, { isErrorState = false } = {}) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OopsProof</title>
+  <title>OopsProof • Buffer safety</title>
   <style>
     :root {
       color-scheme: light;
       --font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --bg: #f8f7f4;
+      /* Buffer-inspired warm palette (from buffer.com) */
+      --bg: #fefefb;
       --card: #ffffff;
-      --text: #0f172a;
-      --text-muted: #475569;
-      --border: #e7e5e4;
-      --primary: #0f172a;
-      --primary-hover: #1e2937;
-      --high: #9f1239;
-      --high-bg: #fff1f2;
-      --medium: #b45309;
-      --medium-bg: #fffbeb;
-      --clear: #166534;
-      --clear-bg: #f0fdf4;
-      --success: #166534;
-      --success-bg: #f0fdf4;
-      --error: #9f1239;
-      --error-bg: #fff1f2;
+      --text: #213130;
+      --text-muted: #555d59;
+      --border: #e7e6df;
+      --subtle-bg: #f7f6f1;
+      /* Primary action: soft green with dark text (Buffer CTA style) */
+      --primary: #b0ec9c;
+      --primary-hover: #9fe38a;
+      --primary-text: #213130;
+      /* Risk states - warm, distinct, Buffer-toned */
+      --high: #c53030;
+      --high-bg: #fdf0ee;
+      --high-border: #e5a8a3;
+      --medium: #b46c2a;
+      --medium-bg: #fdf7ed;
+      --medium-border: #e8c9a0;
+      --clear: #2f6f3f;
+      --clear-bg: #f0f7f1;
+      --clear-border: #a7c9a8;
+      --success: #2f6f3f;
+      --success-bg: #f0f7f1;
+      --error: #c53030;
+      --error-bg: #fdf0ee;
 
       /* Emil-grade easings */
       --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -273,34 +281,62 @@ function renderShell(state, content, { isErrorState = false } = {}) {
     }
 
     .app {
-      max-width: 720px;
+      max-width: 1080px;
       margin: 0 auto;
-      padding: 48px 20px 80px;
+      padding: 32px 24px 64px;
       min-height: 100vh;
     }
 
-    .header {
+    /* Full-width top navigation bar (web app / SaaS desktop feel) */
+    .topbar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .topbar-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 14px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 32px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border);
+      gap: 16px;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
     .brand {
-      font-size: 21px;
+      font-size: 20px;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.025em;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .brand-tag {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-left: 2px;
     }
 
     .org {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-muted);
-      background: #f1f0ed;
+      background: var(--subtle-bg);
       padding: 4px 10px;
       border-radius: 999px;
       font-weight: 500;
+      border: 1px solid var(--border);
     }
 
     .refresh-btn {
@@ -319,15 +355,17 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       align-items: center;
       gap: 6px;
     }
-    .refresh-btn:hover { background: #f8f7f4; border-color: #d4d2cf; }
+    .refresh-btn:hover { background: var(--subtle-bg); border-color: #d8d6cd; }
     .refresh-btn:active { transform: scale(0.985); }
+
+    /* (no legacy .header output; topbar provides the webapp nav) */
 
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 12px;
       padding: 24px;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      box-shadow: 0 1px 3px rgba(33, 49, 48, 0.04);
     }
 
     .section-title {
@@ -369,9 +407,9 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       border-radius: 999px;
       letter-spacing: 0.03em;
     }
-    .badge-high { background: var(--high-bg); color: var(--high); }
-    .badge-medium { background: var(--medium-bg); color: var(--medium); }
-    .badge-clear { background: var(--clear-bg); color: var(--clear); }
+    .badge-high { background: var(--high-bg); color: var(--high); border: 1px solid var(--high-border); }
+    .badge-medium { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
+    .badge-clear { background: var(--clear-bg); color: var(--clear); border: 1px solid var(--clear-border); }
 
     .risk-pill {
       font-size: 12px;
@@ -381,6 +419,7 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      border: 1px solid transparent;
     }
 
     .finding {
@@ -402,15 +441,15 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       appearance: none;
       border: none;
       background: var(--primary);
-      color: white;
+      color: var(--primary-text);
       font: inherit;
       font-weight: 600;
       font-size: 15px;
       padding: 14px 28px;
       border-radius: 10px;
       cursor: pointer;
-      transition: transform 140ms var(--ease-out), background 140ms ease;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+      transition: transform 140ms var(--ease-out), background 140ms ease, box-shadow 140ms ease;
+      box-shadow: 0 1px 2px rgba(33, 49, 48, 0.08);
       width: 100%;
       max-width: 420px;
       margin-top: 8px;
@@ -436,7 +475,7 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       cursor: pointer;
       transition: all 120ms var(--ease-out);
     }
-    .ghost-btn:hover { background: #f8f7f4; }
+    .ghost-btn:hover { background: var(--subtle-bg); }
 
     .back-link {
       font-size: 13px;
@@ -458,33 +497,33 @@ function renderShell(state, content, { isErrorState = false } = {}) {
     }
     .status-banner.error {
       background: var(--error-bg);
-      border: 1px solid #fecdd3;
+      border: 1px solid var(--high-border);
       color: var(--error);
     }
     .status-banner.success {
       background: var(--success-bg);
-      border: 1px solid #bbf7d0;
+      border: 1px solid var(--clear-border);
       color: var(--success);
     }
     .status-banner strong { display: block; margin-bottom: 4px; font-size: 15px; }
 
-    .queue-list { display: flex; flex-direction: column; gap: 10px; }
+    .queue-list { display: flex; flex-direction: column; gap: 12px; }
     .queue-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 18px 20px;
+      padding: 20px 22px;
       transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out), border-color 160ms ease;
       cursor: pointer;
     }
     .queue-card:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.08);
-      border-color: #d4d2cf;
+      box-shadow: 0 6px 16px -4px rgb(33 49 48 / 0.09);
+      border-color: #d8d6cd;
     }
-    .queue-card.risky { border-left: 4px solid var(--high); }
-    .queue-card.medium { border-left: 4px solid var(--medium); }
-    .queue-card.clear { border-left: 4px solid #a3a3a3; opacity: 0.92; }
+    .queue-card.risky { border-left: 5px solid var(--high); }
+    .queue-card.medium { border-left: 5px solid var(--medium); }
+    .queue-card.clear { border-left: 5px solid #a8b0a8; opacity: 0.9; }
 
     .queue-card .text {
       font-size: 15px;
@@ -499,9 +538,10 @@ function renderShell(state, content, { isErrorState = false } = {}) {
     .queue-meta {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       font-size: 12px;
       color: var(--text-muted);
+      flex-wrap: wrap;
     }
 
     .due {
@@ -524,26 +564,26 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 20px;
-      background: #fafaf9;
+      background: var(--subtle-bg);
       margin: 20px 0;
     }
 
     .draft-preview {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      background: white;
+      background: var(--card);
       border: 1px solid var(--border);
       padding: 14px 16px;
       border-radius: 8px;
       font-size: 13.5px;
       line-height: 1.5;
       margin: 12px 0;
-      color: #334155;
+      color: var(--text);
     }
 
     .draft-id {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      background: #0f172a;
-      color: #e0f2fe;
+      background: var(--subtle-bg);
+      color: var(--text);
       padding: 10px 14px;
       border-radius: 8px;
       font-size: 14px;
@@ -551,20 +591,21 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      border: 1px solid var(--border);
     }
 
     .copy-btn {
       font-size: 11px;
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.25);
-      color: #bae6fd;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
       padding: 4px 10px;
       border-radius: 6px;
       cursor: pointer;
       font-weight: 600;
       transition: all 120ms ease;
     }
-    .copy-btn:hover { background: rgba(255,255,255,0.18); }
+    .copy-btn:hover { background: var(--bg); color: var(--text); }
 
     .checkbox-label {
       display: flex;
@@ -598,20 +639,37 @@ function renderShell(state, content, { isErrorState = false } = {}) {
 
     .divider { height: 1px; background: var(--border); margin: 24px 0; }
 
+    /* Desktop web app layout for Inspect (2-col) */
+    .inspect-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+      align-items: start;
+    }
+    .inspect-main { min-width: 0; }
+    .inspect-side { min-width: 0; }
+    @media (max-width: 860px) {
+      .inspect-grid { grid-template-columns: 1fr; }
+      .inspect-side { margin-top: 8px; }
+    }
+
+    .queue-card .text { font-size: 15px; }
+
     @media (prefers-reduced-motion: reduce) {
       .queue-card, .primary-btn, .refresh-btn { transition: none !important; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="header">
-      <div>
-        <div class="brand">OopsProof</div>
-        <div style="font-size:12px; color:#64748b; margin-top:1px;">Publishing safety for Buffer</div>
+  <!-- Full-width sticky topbar for web app desktop feel -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <a href="/" class="brand">OopsProof</a>
+        <span class="brand-tag">Buffer publishing safety</span>
       </div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div class="org">${escapeHtml(orgName)}</div>
+      <div class="topbar-right">
+        <div class="org" title="Buffer organization">${escapeHtml(orgName)}</div>
         <form method="get" action="/">
           <button type="submit" class="refresh-btn" aria-label="Refresh live Buffer data">
             ↻ Refresh
@@ -619,7 +677,9 @@ function renderShell(state, content, { isErrorState = false } = {}) {
         </form>
       </div>
     </div>
+  </div>
 
+  <div class="app">
     ${content}
   </div>
 
@@ -650,12 +710,14 @@ function renderShell(state, content, { isErrorState = false } = {}) {
             await navigator.clipboard.writeText(text);
             const orig = copyBtn.textContent;
             copyBtn.textContent = 'Copied';
-            copyBtn.style.background = 'rgba(16, 185, 129, 0.2)';
-            copyBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            copyBtn.style.background = 'var(--clear-bg)';
+            copyBtn.style.borderColor = 'var(--clear-border)';
+            copyBtn.style.color = 'var(--clear)';
             setTimeout(() => {
               copyBtn.textContent = orig;
               copyBtn.style.background = '';
               copyBtn.style.borderColor = '';
+              copyBtn.style.color = '';
             }, 1600);
           } catch (_) {
             // fallback: select text
@@ -762,15 +824,15 @@ function renderQueueScreen(state) {
     : "All upcoming posts are clear";
 
   return `
-    <div class="card" style="margin-bottom:12px; padding:18px 22px;">
+    <div class="card" style="margin-bottom:16px; padding:18px 22px;">
       <div class="section-title">Your Queue</div>
       <div style="font-size:15px; font-weight:600;">${headerText}</div>
-      <div style="font-size:12px; color:#64748b; margin-top:2px;">Live from Buffer • sorted by due time</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Live from Buffer • sorted by due time</div>
     </div>
 
     ${listHtml}
 
-    <div style="margin-top:28px; font-size:11px; color:#94a3b8; text-align:center;">
+    <div style="margin-top:32px; font-size:11px; color:var(--text-muted); text-align:center; opacity:0.7;">
       One action per screen. Core goal in 3 clicks.
     </div>
   `;
@@ -800,7 +862,7 @@ function renderQueueCard(assessed, isRisky) {
 
       <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
         ${findings.length > 0 
-          ? `<div style="font-size:12px; color:#64748b; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(findings[0].summary)}</div>` 
+          ? `<div style="font-size:12px; color:var(--text-muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(findings[0].summary)}</div>` 
           : `<div></div>`}
         ${action}
       </div>
@@ -821,51 +883,60 @@ function renderInspectScreen(assessed, organization) {
     ? findings.map(f => `
         <div class="finding ${f.riskLevel.toLowerCase()}">
           <div class="rule">${escapeHtml(f.rule)}</div>
-          <div style="font-size:14px; color:#334155;">${escapeHtml(f.summary)}</div>
+          <div style="font-size:14px; color:var(--text);">${escapeHtml(f.summary)}</div>
         </div>
       `).join("")
-    : `<div style="color:#64748b; font-size:14px;">No findings. This post is clear.</div>`;
+    : `<div style="color:var(--text-muted); font-size:14px;">No findings. This post is clear.</div>`;
 
   const actionHtml = canQuarantine 
-    ? `<form method="post" action="/quarantine" style="margin-top:28px;">
+    ? `<form method="post" action="/quarantine">
          <input type="hidden" name="postId" value="${escapeHtml(post.id)}">
-         <button type="submit" class="primary-btn">Quarantine this post</button>
-         <div style="font-size:11px; color:#64748b; margin-top:8px; text-align:center;">This is the only action on this screen.</div>
+         <button type="submit" class="primary-btn" style="max-width:none; width:100%;">Quarantine this post</button>
+         <div style="font-size:10px; color:var(--text-muted); margin-top:8px; text-align:center; line-height:1.3;">Only action on this screen</div>
        </form>`
-    : `<div style="margin-top:24px; padding:16px; background:#f8f7f4; border-radius:10px; font-size:13px; color:#475569;">
-         This post has no risk findings. No quarantine action available.
+    : `<div style="padding:14px; background:var(--subtle-bg); border-radius:10px; font-size:12px; color:var(--text-muted); border:1px solid var(--border);">
+         No risk findings. No quarantine action available.
        </div>`;
 
   return `
     <a href="/" class="back-link">← Back to queue</a>
 
     <div class="screen-title">Inspect Scheduled Post</div>
-    <div class="card">
-      <div class="post-header">
-        <span class="risk-pill" style="background:${isHigh ? 'var(--high-bg)' : '#fefce8'}; color:${isHigh ? 'var(--high)' : '#854d0e'}">
-          ${isHigh ? '⚠' : '●'} ${escapeHtml(riskLevel)} Risk
-        </span>
-        <span class="badge ${badgeClass}">${escapeHtml(riskLevel)}</span>
+
+    <div class="inspect-grid">
+      <div class="inspect-main">
+        <div class="card">
+          <div class="post-header">
+            <span class="risk-pill" style="background:${isHigh ? 'var(--high-bg)' : 'var(--medium-bg)'}; color:${isHigh ? 'var(--high)' : 'var(--medium)'}; border:1px solid ${isHigh ? 'var(--high-border)' : 'var(--medium-border)'}">
+              ${isHigh ? '⚠' : '●'} ${escapeHtml(riskLevel)} Risk
+            </span>
+            <span class="badge ${badgeClass}">${escapeHtml(riskLevel)}</span>
+          </div>
+
+          <div class="post-text-hero">${escapeHtml(post.text)}</div>
+
+          <div class="meta-row">
+            <span><strong>Channel</strong> ${escapeHtml(post.channelName)} <span style="opacity:0.6">(${escapeHtml(post.service)})</span></span>
+            <span><strong>Due</strong> ${escapeHtml(due)}</span>
+            ${created ? `<span><strong>Created</strong> ${escapeHtml(created)}</span>` : ''}
+            <span><strong>Status</strong> ${escapeHtml(post.status)}</span>
+          </div>
+        </div>
       </div>
 
-      <div class="post-text-hero">${escapeHtml(post.text)}</div>
+      <div class="inspect-side">
+        <div class="card" style="position:sticky; top:80px;">
+          <div class="section-title">Risk summary</div>
+          ${findings.length > 0 ? findingsHtml : `<div style="font-size:13px; color:var(--text-muted); line-height:1.4;">No risk findings. This post is clear.</div>`}
 
-      <div class="meta-row">
-        <span><strong>Channel</strong> ${escapeHtml(post.channelName)} <span style="opacity:0.6">(${escapeHtml(post.service)})</span></span>
-        <span><strong>Due</strong> ${escapeHtml(due)}</span>
-        ${created ? `<span><strong>Created</strong> ${escapeHtml(created)}</span>` : ''}
-        <span><strong>Status</strong> ${escapeHtml(post.status)}</span>
+          <div class="divider" style="margin:20px 0 12px;"></div>
+
+          ${actionHtml}
+        </div>
       </div>
-
-      <div class="divider"></div>
-
-      <div class="section-title">Findings — why this was flagged</div>
-      ${findingsHtml}
     </div>
 
-    ${actionHtml}
-
-    <div style="margin-top:32px; font-size:11px; color:#94a3b8; text-align:center;">
+    <div style="margin-top:28px; font-size:11px; color:var(--text-muted); text-align:center; opacity:0.7;">
       Every finding is deterministic. No AI involved.
     </div>
   `;
@@ -886,22 +957,22 @@ function renderQuarantineScreen(state, target, result, { showConfirmForm = false
       </div>
 
       <div class="card">
-        <div class="section-title" style="color:#166534;">Safe Draft Created</div>
+        <div class="section-title" style="color:var(--clear);">Safe Draft Created</div>
         
-        <div style="margin:16px 0 8px; font-size:13px; color:#475569;">Draft Post ID</div>
+        <div style="margin:16px 0 8px; font-size:13px; color:var(--text-muted);">Draft Post ID</div>
         <div class="draft-id">
           <span id="draft-id-value">${escapeHtml(result.draftPostId)}</span>
           <button id="copy-draft-id" class="copy-btn" type="button">Copy</button>
         </div>
 
-        <div style="margin-top:24px; padding:16px; background:#f0fdf4; border-radius:10px; font-size:14px; line-height:1.5;">
+        <div style="margin-top:24px; padding:16px; background:var(--success-bg); border-radius:10px; font-size:14px; line-height:1.5; border:1px solid var(--clear-border);">
           <strong>Next step:</strong> Go to Buffer and remove the original scheduled post manually.<br>
           The draft is on the same channel for easy review.
         </div>
       </div>
 
       <form method="get" action="/" style="margin-top:20px;">
-        <button type="submit" class="primary-btn" style="background:#166534;">Return to Queue</button>
+        <button type="submit" class="primary-btn">Return to Queue</button>
       </form>
     `;
   }
@@ -942,12 +1013,12 @@ function renderQuarantineScreen(state, target, result, { showConfirmForm = false
       </div>
 
       <div class="confirm-box">
-        <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">DRAFT TEXT THAT WILL BE CREATED</div>
+        <div style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px;">DRAFT TEXT THAT WILL BE CREATED</div>
         <div class="draft-preview">${escapeHtml(draftPreview)}</div>
-        <div style="font-size:12px; color:#64748b;">(first 80 characters of original + conservative prefix)</div>
+        <div style="font-size:12px; color:var(--text-muted);">(first 80 characters of original + conservative prefix)</div>
       </div>
 
-      <div style="font-size:13.5px; line-height:1.55; color:#334155; margin:16px 0 20px;">
+      <div style="font-size:13.5px; line-height:1.55; color:var(--text); margin:16px 0 20px;">
         <strong>Important:</strong> The original Scheduled Post will <strong>remain in Buffer</strong>. 
         You must remove it yourself after the draft is created.
       </div>
@@ -963,7 +1034,7 @@ function renderQuarantineScreen(state, target, result, { showConfirmForm = false
         <button id="quarantine-action-btn" type="submit" class="primary-btn" disabled style="opacity:0.5; margin-top:20px;">
           Create Safe Draft
         </button>
-        <div style="font-size:10px; text-align:center; margin-top:8px; color:#94a3b8;">This is the only action on this screen.</div>
+        <div style="font-size:10px; text-align:center; margin-top:8px; color:var(--text-muted); opacity:0.8;">This is the only action on this screen.</div>
       </form>
     </div>
   `;
