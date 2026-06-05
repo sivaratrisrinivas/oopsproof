@@ -8,6 +8,7 @@ import { BufferClientError } from "../src/bufferClient.js";
 import {
   createOopsProofActionResponse,
   createOopsProofResponse,
+  createOopsProofRequestHandler,
   createOopsProofServer,
 } from "../src/server.js";
 
@@ -468,6 +469,22 @@ test("HTTP Refresh route renders the Queue Table even when the request URL has a
   assert.doesNotMatch(response.body, /Not found/);
 });
 
+test("serverless-compatible request handler renders the root app route", async () => {
+  const handler = createOopsProofRequestHandler({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => ({
+      organization: { id: "org-first", name: "Launch Team" },
+      posts: [],
+    }),
+  });
+
+  const response = await requestHandler(handler, { method: "GET", url: "/" });
+
+  assert.equal(response.status, 200);
+  assert.match(response.body, /OopsProof/);
+  assert.match(response.body, /Launch Team/);
+});
+
 test("HTTP Quarantine route accepts form posts even when the request URL has a query string", async () => {
   const createdDrafts = [];
   const server = createOopsProofServer({
@@ -508,6 +525,14 @@ test("HTTP Quarantine route accepts form posts even when the request URL has a q
 
 async function requestServer(server, { method, url, body = "" }) {
   const requestHandler = server.listeners("request")[0];
+  return requestHandlerForTest(requestHandler, { method, url, body });
+}
+
+async function requestHandler(handler, { method, url, body = "" }) {
+  return requestHandlerForTest(handler, { method, url, body });
+}
+
+async function requestHandlerForTest(handler, { method, url, body = "" }) {
   let status = 0;
   let responseBody = "";
   const request = {
@@ -528,7 +553,7 @@ async function requestServer(server, { method, url, body = "" }) {
     },
   };
 
-  await requestHandler(request, response);
+  await handler(request, response);
 
   return { status, body: responseBody };
 }

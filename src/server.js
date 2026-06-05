@@ -18,7 +18,23 @@ export function createOopsProofServer({
   loadBufferData = loadLiveBufferQueue,
   createDraftPost = createBufferDraftPost,
 } = {}) {
-  return createServer(async (request, response) => {
+  return createServer(
+    createOopsProofRequestHandler({
+      env,
+      envFilePath,
+      loadBufferData,
+      createDraftPost,
+    }),
+  );
+}
+
+export function createOopsProofRequestHandler({
+  env = process.env,
+  envFilePath = resolve(process.cwd(), ".env"),
+  loadBufferData = loadLiveBufferQueue,
+  createDraftPost = createBufferDraftPost,
+} = {}) {
+  return async function handleOopsProofRequest(request, response) {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 
     if (request.method === "GET" && pathname === "/") {
@@ -52,7 +68,7 @@ export function createOopsProofServer({
       response.end("Not found");
       return;
     }
-  });
+  };
 }
 
 export async function createOopsProofResponse({
@@ -1080,3 +1096,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`OopsProof listening on http://localhost:${port}`);
   });
 }
+
+export default createOopsProofRequestHandler();
