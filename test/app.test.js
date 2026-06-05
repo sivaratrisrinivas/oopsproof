@@ -10,6 +10,7 @@ import {
   createOopsProofResponse,
   createOopsProofRequestHandler,
   createOopsProofServer,
+  createQueueCache,
 } from "../src/server.js";
 
 test("initial route shows missing Local Buffer API Key state without fake fallback data", async () => {
@@ -467,6 +468,99 @@ test("HTTP Refresh route renders the Queue Table even when the request URL has a
   assert.equal(response.status, 200);
   assert.match(response.body, /Your Queue|OopsProof/);
   assert.doesNotMatch(response.body, /Not found/);
+});
+
+test("normal navigation and Quarantine reuse cached Buffer queue data to protect Free tier limits", async () => {
+  let loadCount = 0;
+  let draftCount = 0;
+  const handler = createOopsProofRequestHandler({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => {
+      loadCount += 1;
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts: [
+          {
+            id: "post-risky",
+            text: "LaunchKit ships today for early partners",
+            channelId: "channel-x",
+            channelName: "Founder X",
+            service: "twitter",
+            status: "scheduled",
+            dueAt: "2026-06-10T12:00:00.000Z",
+            createdAt: "2026-06-01T09:00:00.000Z",
+          },
+        ],
+      };
+    },
+    createDraftPost: async () => {
+      draftCount += 1;
+      return { id: "draft-123" };
+    },
+  });
+
+  await requestHandler(handler, { method: "GET", url: "/" });
+  await requestHandler(handler, { method: "GET", url: "/?inspect=post-risky" });
+  await requestHandler(handler, {
+    method: "POST",
+    url: "/quarantine",
+    body: "postId=post-risky",
+  });
+  await requestHandler(handler, {
+    method: "POST",
+    url: "/quarantine",
+    body: "postId=post-risky&confirmed=yes",
+  });
+
+  assert.equal(loadCount, 1);
+  assert.equal(draftCount, 1);
+});
+
+test("manual Refresh bypasses cached Buffer queue data", async () => {
+  let loadCount = 0;
+  const handler = createOopsProofRequestHandler({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => {
+      loadCount += 1;
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts: [],
+      };
+    },
+  });
+
+  await requestHandler(handler, { method: "GET", url: "/" });
+  await requestHandler(handler, { method: "GET", url: "/" });
+  await requestHandler(handler, { method: "GET", url: "/?refresh=1" });
+
+  assert.equal(loadCount, 2);
+});
+
+test("cached Buffer queue data expires after the cache TTL", async () => {
+  let currentTime = 0;
+  let loadCount = 0;
+  const handler = createOopsProofRequestHandler({
+    env: { BUFFER_API_KEY: "server-key" },
+    queueCache: createQueueCache({
+      ttlMs: 1000,
+      now: () => currentTime,
+    }),
+    loadBufferData: async () => {
+      loadCount += 1;
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts: [],
+      };
+    },
+  });
+
+  await requestHandler(handler, { method: "GET", url: "/" });
+  currentTime = 500;
+  await requestHandler(handler, { method: "GET", url: "/" });
+  currentTime = 1001;
+  await requestHandler(handler, { method: "GET", url: "/" });
+
+  assert.equal(loadCount, 2);
 });
 
 test("serverless-compatible request handler renders the root app route", async () => {

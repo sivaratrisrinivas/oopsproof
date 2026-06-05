@@ -1,9 +1,14 @@
-import { createOopsProofActionResponse, createOopsProofResponse } from "../src/server.js";
+import {
+  createOopsProofActionResponse,
+  createOopsProofResponse,
+  createQueueCache,
+} from "../src/server.js";
 
 export function createVercelHandler({
   env = process.env,
   loadBufferData,
   createDraftPost,
+  queueCache = createQueueCache(),
 } = {}) {
   return async function handler(request, response) {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -14,6 +19,7 @@ export function createVercelHandler({
         await createOopsProofResponse({
           env,
           loadBufferData,
+          queueCache,
           url: request.url,
         }),
       );
@@ -26,6 +32,7 @@ export function createVercelHandler({
           env,
           loadBufferData,
           createDraftPost,
+          queueCache,
           formData: await readFormData(request),
         }),
       );

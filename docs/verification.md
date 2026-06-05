@@ -20,6 +20,12 @@ Coverage expectations:
 
 Do not add fake posts, seeded data, demo fallback data, AI behavior, Quarantine History, organization pickers, or channel pickers as testing shortcuts.
 
+## Buffer API Usage Guardrail
+
+OopsProof keeps a short-lived server-side queue cache for 2 minutes to protect Buffer Free-tier API limits. Normal navigation, Inspect, Quarantine Confirmation, and Create Safe Draft reuse the cached queue. Pressing Refresh bypasses the cache and fetches live Buffer data again.
+
+In the common case, a full Queue -> Inspect -> Quarantine -> Create Safe Draft flow uses one live queue load plus one draft mutation. A live queue load is usually 3 Buffer requests: organizations, channels, and scheduled posts. Extra scheduled-post requests happen only when Buffer pagination is needed.
+
 ## Optional Live Buffer Verification
 
 Live verification is manual and optional. Use it only when you have a real Buffer account and are comfortable creating a Draft Post during Quarantine verification.
@@ -40,7 +46,7 @@ Live verification is manual and optional. Use it only when you have a real Buffe
 
 4. Verify the Queue Table shows the selected first Buffer Organization, scans all channels, and lists only live Scheduled Posts due in the next 30 days.
 
-5. Press Refresh and verify the page reloads from live Buffer data without auto-refresh, polling, or stored Quarantine History.
+5. Press Refresh and verify the page reloads from live Buffer data without auto-refresh, polling, or stored Quarantine History. Avoid repeatedly pressing Refresh on Free tier because it intentionally bypasses the cache.
 
 6. For a risky Scheduled Post, review Quarantine Confirmation. If you confirm it, verify Buffer receives a same-channel Draft Post whose text starts with `Needs review before publishing: `.
 

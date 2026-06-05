@@ -40,6 +40,8 @@ OopsProof runs deterministic diagnosis with the v1 Risk Rules: Embargo Term Rule
 
 A Refresh button is always available in the sticky top navigation bar. It fetches live Buffer data again from the server, re-runs deterministic diagnosis against the newly loaded Scheduled Posts, and renders the current Queue (or error/empty state).
 
+To protect Buffer Free-tier API limits, normal navigation reuses the most recently loaded queue for 2 minutes. Inspect and Quarantine screens use this short-lived server-side cache instead of reloading Buffer on every click. Pressing Refresh explicitly bypasses the cache and fetches live Buffer data again.
+
 OopsProof v1 does not auto-refresh, poll Buffer, or store Quarantine History. The current Buffer queue remains the source of truth after each refresh. The entire experience is server-rendered with progressive enhancements for delightful interactions (e.g. copy-to-clipboard on success, checkbox-gated action).
 
 ## Quarantine (Screens 2 & 3)
@@ -99,6 +101,14 @@ Use a real Buffer account for live verification. OopsProof never uses fake posts
 11. Verify the original Scheduled Post still exists in Buffer. Remove it manually if you do not want it to publish.
 
 Full verification notes are documented in [docs/verification.md](docs/verification.md).
+
+## Buffer API Usage
+
+OopsProof is designed to stay practical on Buffer's Free tier. A normal Queue load makes 3 Buffer API requests: organizations, channels, and the first scheduled-posts page. More requests are made only if scheduled posts require pagination beyond the first 50 posts.
+
+After the initial Queue load, Review, Quarantine confirmation, and Create Safe Draft reuse the cached queue for 2 minutes. Creating the safe draft adds 1 Buffer mutation. In the common case, one full review-and-quarantine flow uses about 4 Buffer requests instead of reloading the queue on every screen.
+
+Press Refresh only when you need current Buffer data; it bypasses the cache and performs a fresh live load.
 
 ## Deploying To Vercel
 

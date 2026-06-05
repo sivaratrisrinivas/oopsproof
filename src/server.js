@@ -11,12 +11,14 @@ import { createSafeDraftReplacement } from "./quarantineService.js";
 import { assessQueuePosts } from "./riskEngine.js";
 
 const DEFAULT_PORT = 3000;
+const DEFAULT_QUEUE_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export function createOopsProofServer({
   env = process.env,
   envFilePath = resolve(process.cwd(), ".env"),
   loadBufferData = loadLiveBufferQueue,
   createDraftPost = createBufferDraftPost,
+  queueCache = createQueueCache(),
 } = {}) {
   return createServer(
     createOopsProofRequestHandler({
@@ -24,6 +26,7 @@ export function createOopsProofServer({
       envFilePath,
       loadBufferData,
       createDraftPost,
+      queueCache,
     }),
   );
 }
@@ -33,12 +36,19 @@ export function createOopsProofRequestHandler({
   envFilePath = resolve(process.cwd(), ".env"),
   loadBufferData = loadLiveBufferQueue,
   createDraftPost = createBufferDraftPost,
+  queueCache = createQueueCache(),
 } = {}) {
   return async function handleOopsProofRequest(request, response) {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 
     if (request.method === "GET" && pathname === "/") {
-      const appResponse = await createOopsProofResponse({ env, envFilePath, loadBufferData, url: request.url });
+      const appResponse = await createOopsProofResponse({
+        env,
+        envFilePath,
+        loadBufferData,
+        queueCache,
+        url: request.url,
+      });
       response.writeHead(200, {
         "content-type": appResponse.contentType,
         "cache-control": appResponse.cacheControl,
@@ -53,6 +63,7 @@ export function createOopsProofRequestHandler({
         envFilePath,
         loadBufferData,
         createDraftPost,
+        queueCache,
         formData: new URLSearchParams(await readRequestBody(request)),
       });
       response.writeHead(200, {
@@ -75,19 +86,24 @@ export async function createOopsProofResponse({
   env = process.env,
   envFilePath = resolve(process.cwd(), ".env"),
   loadBufferData = loadLiveBufferQueue,
+  queueCache = null,
   url = "/",
 } = {}) {
   const localEnv = await readLocalEnv(envFilePath);
   const bufferApiKey = env.BUFFER_API_KEY || localEnv.BUFFER_API_KEY || "";
-
-  const state = await loadReadyState({ bufferApiKey, loadBufferData });
   const parsedUrl = new URL(url, "http://localhost");
+  const state = await loadReadyState({
+    bufferApiKey,
+    loadBufferData,
+    queueCache,
+    bypassCache: parsedUrl.searchParams.has("refresh"),
+  });
   const inspectId = parsedUrl.searchParams.get("inspect");
 
   return responseFromState(state, { inspectId });
 }
 
-async function loadReadyState({ bufferApiKey, loadBufferData }) {
+async function loadReadyState({ bufferApiKey, loadBufferData, queueCache, bypassCache = false }) {
   if (!bufferApiKey.trim()) {
     return {
       kind: "missing-key",
@@ -97,7 +113,7 @@ async function loadReadyState({ bufferApiKey, loadBufferData }) {
   }
 
   try {
-    const queue = await loadBufferData({ bufferApiKey });
+    const queue = await loadQueueData({ bufferApiKey, loadBufferData, queueCache, bypassCache });
     return {
       kind: "ready",
       message: "Loaded live Buffer data",
@@ -108,6 +124,51 @@ async function loadReadyState({ bufferApiKey, loadBufferData }) {
   } catch (error) {
     return normalizeLoadError(error);
   }
+}
+
+async function loadQueueData({ bufferApiKey, loadBufferData, queueCache, bypassCache }) {
+  if (!queueCache) {
+    return loadBufferData({ bufferApiKey });
+  }
+
+  const cachedQueue = bypassCache ? null : queueCache.get(bufferApiKey);
+  if (cachedQueue) {
+    return cachedQueue;
+  }
+
+  const queue = await loadBufferData({ bufferApiKey });
+  queueCache.set(bufferApiKey, queue);
+  return queue;
+}
+
+export function createQueueCache({
+  ttlMs = DEFAULT_QUEUE_CACHE_TTL_MS,
+  now = () => Date.now(),
+} = {}) {
+  let entry = null;
+
+  return {
+    get(bufferApiKey) {
+      if (!entry || entry.bufferApiKey !== bufferApiKey) {
+        return null;
+      }
+      if (now() - entry.loadedAt > ttlMs) {
+        entry = null;
+        return null;
+      }
+      return entry.queue;
+    },
+    set(bufferApiKey, queue) {
+      entry = {
+        bufferApiKey,
+        queue,
+        loadedAt: now(),
+      };
+    },
+    clear() {
+      entry = null;
+    },
+  };
 }
 
 function responseFromState(state, { inspectId, quarantineResult, quarantineTarget, showQuarantineConfirm = false } = {}) {
@@ -124,11 +185,12 @@ export async function createOopsProofActionResponse({
   envFilePath = resolve(process.cwd(), ".env"),
   loadBufferData = loadLiveBufferQueue,
   createDraftPost = createBufferDraftPost,
+  queueCache = null,
   formData = new URLSearchParams(),
 } = {}) {
   const localEnv = await readLocalEnv(envFilePath);
   const bufferApiKey = env.BUFFER_API_KEY || localEnv.BUFFER_API_KEY || "";
-  const state = await loadReadyState({ bufferApiKey, loadBufferData });
+  const state = await loadReadyState({ bufferApiKey, loadBufferData, queueCache });
 
   if (state.kind !== "ready") {
     return responseFromState(state);
@@ -687,6 +749,7 @@ function renderShell(state, content, { isErrorState = false } = {}) {
       <div class="topbar-right">
         <div class="org" title="Buffer organization">${escapeHtml(orgName)}</div>
         <form method="get" action="/">
+          <input type="hidden" name="refresh" value="1">
           <button type="submit" class="refresh-btn" aria-label="Refresh live Buffer data">
             ↻ Refresh
           </button>

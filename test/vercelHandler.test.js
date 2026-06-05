@@ -64,6 +64,52 @@ test("Vercel handler creates a Safe Draft Replacement from Quarantine form posts
   assert.match(response.body, /draft-123/);
 });
 
+test("Vercel handler reuses cached Buffer queue data across navigation and Quarantine", async () => {
+  let loadCount = 0;
+  let draftCount = 0;
+  const handler = createVercelHandler({
+    env: { BUFFER_API_KEY: "server-key" },
+    loadBufferData: async () => {
+      loadCount += 1;
+      return {
+        organization: { id: "org-first", name: "Launch Team" },
+        posts: [
+          {
+            id: "post-risky",
+            text: "LaunchKit ships today for early partners",
+            channelId: "channel-x",
+            channelName: "Founder X",
+            service: "twitter",
+            status: "scheduled",
+            dueAt: "2026-06-10T12:00:00.000Z",
+            createdAt: "2026-06-01T09:00:00.000Z",
+          },
+        ],
+      };
+    },
+    createDraftPost: async () => {
+      draftCount += 1;
+      return { id: "draft-123" };
+    },
+  });
+
+  await requestHandler(handler, { method: "GET", url: "/" });
+  await requestHandler(handler, { method: "GET", url: "/?inspect=post-risky" });
+  await requestHandler(handler, {
+    method: "POST",
+    url: "/quarantine",
+    body: "postId=post-risky",
+  });
+  await requestHandler(handler, {
+    method: "POST",
+    url: "/quarantine",
+    body: "postId=post-risky&confirmed=yes",
+  });
+
+  assert.equal(loadCount, 1);
+  assert.equal(draftCount, 1);
+});
+
 test("Vercel handler returns Not found for unsupported routes", async () => {
   const handler = createVercelHandler({
     env: { BUFFER_API_KEY: "server-key" },
